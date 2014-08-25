@@ -32,11 +32,16 @@
 #include <QTranslator>
 #include <QFile>
 #include <QLibraryInfo>
+#include <QDebug>
 
 #ifndef DISABLE_GUI
 #if defined(QBT_STATIC_QT)
 #include <QtPlugin>
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+Q_IMPORT_PLUGIN(QICOPlugin)
+#else
 Q_IMPORT_PLUGIN(qico)
+#endif
 #endif
 #include <QMessageBox>
 #include <QStyleFactory>
@@ -58,8 +63,7 @@ Q_IMPORT_PLUGIN(qico)
 #endif
 
 #include "preferences.h"
-#include "qinisettings.h"
-#if defined(Q_WS_X11) || defined(Q_WS_MAC)
+#if defined(Q_OS_UNIX)
 #include <signal.h>
 #include <execinfo.h>
 #include "stacktrace.h"
@@ -92,7 +96,7 @@ public:
     std::cout << '\t' << prg_name << " -d | --daemon: " << qPrintable(tr("run in daemon-mode (background)")) << std::endl;
 #endif
     std::cout << '\t' << prg_name << " --help: " << qPrintable(tr("displays this help message")) << std::endl;
-    std::cout << '\t' << prg_name << " --webui-port=x: " << qPrintable(tr("changes the webui port (current: %1)").arg(QString::number(Preferences().getWebUiPort()))) << std::endl;
+    std::cout << '\t' << prg_name << " --webui-port=x: " << qPrintable(tr("changes the webui port (current: %1)").arg(QString::number(Preferences::instance()->getWebUiPort()))) << std::endl;
     std::cout << '\t' << prg_name << " " << qPrintable(tr("[files or urls]: downloads the torrents passed by the user (optional)")) << std::endl;
   }
 };
@@ -102,8 +106,8 @@ class LegalNotice: public QObject {
 
 public:
   static bool userAgreesWithNotice() {
-    QIniSettings settings;
-    if (settings.value(QString::fromUtf8("LegalNotice/Accepted"), false).toBool()) // Already accepted once
+    Preferences* const pref = Preferences::instance();
+    if (pref->getAcceptedLegal()) // Already accepted once
       return true;
 #ifdef DISABLE_GUI
     std::cout << std::endl << "*** " << qPrintable(tr("Legal Notice")) << " ***" << std::endl;
@@ -112,7 +116,7 @@ public:
     char ret = getchar(); // Read pressed key
     if (ret == 'y' || ret == 'Y') {
       // Save the answer
-      settings.setValue(QString::fromUtf8("LegalNotice/Accepted"), true);
+      pref->setAcceptedLegal(true);
       return true;
     }
     return false;
@@ -127,7 +131,7 @@ public:
     msgBox.exec();
     if (msgBox.clickedButton() == agree_button) {
       // Save the answer
-      settings.setValue(QString::fromUtf8("LegalNotice/Accepted"), true);
+      pref->setAcceptedLegal(true);
       return true;
     }
     return false;
@@ -137,7 +141,7 @@ public:
 
 #include "main.moc"
 
-#if defined(Q_WS_X11) || defined(Q_WS_MAC) || defined(STACKTRACE_WIN)
+#if defined(Q_OS_UNIX) || defined(STACKTRACE_WIN)
 void sigintHandler(int) {
   signal(SIGINT, 0);
   qDebug("Catching SIGINT, exiting cleanly");
@@ -187,7 +191,7 @@ void sigabrtHandler(int) {
 
 // Main
 int main(int argc, char *argv[]) {
-#ifdef Q_OS_MACX
+#if defined(Q_OS_MACX) && !defined(DISABLE_GUI)
   if ( QSysInfo::MacintoshVersion > QSysInfo::MV_10_8 )
   {
     // fix Mac OS X 10.9 (mavericks) font issue
@@ -245,7 +249,7 @@ int main(int argc, char *argv[]) {
   }
 
   srand(time(0));
-  Preferences pref;
+  Preferences* const pref = Preferences::instance();
 #ifndef DISABLE_GUI
   bool no_splash = false;
 #else
@@ -256,16 +260,19 @@ int main(int argc, char *argv[]) {
 #endif
 
   // Load translation
-  QString locale = pref.getLocale();
+  QString locale = pref->getLocale();
   QTranslator qtTranslator;
   QTranslator translator;
   if (locale.isEmpty()) {
     locale = QLocale::system().name();
-    pref.setLocale(locale);
+    pref->setLocale(locale);
   }
   if (qtTranslator.load(
-          QString::fromUtf8("qt_") + locale, QLibraryInfo::location(QLibraryInfo::TranslationsPath)
-                                                                    )) {
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+          QString::fromUtf8("qtbase_") + locale, QLibraryInfo::location(QLibraryInfo::TranslationsPath)) ||
+      qtTranslator.load(
+#endif
+          QString::fromUtf8("qt_") + locale, QLibraryInfo::location(QLibraryInfo::TranslationsPath))) {
     qDebug("Qt %s locale recognized, using translation.", qPrintable(locale));
   }else{
     qDebug("Qt %s locale unrecognized, using default (en).", qPrintable(locale));
@@ -310,7 +317,7 @@ int main(int argc, char *argv[]) {
             bool ok = false;
             int new_port = parts.last().toInt(&ok);
             if (ok && new_port > 0 && new_port <= 65535) {
-              Preferences().setWebUiPort(new_port);
+              Preferences::instance()->setWebUiPort(new_port);
             }
           }
         }
@@ -321,7 +328,7 @@ int main(int argc, char *argv[]) {
   }
 
 #ifndef DISABLE_GUI
-  if (pref.isSlashScreenDisabled()) {
+  if (pref->isSlashScreenDisabled()) {
     no_splash = true;
   }
   QSplashScreen *splash = 0;
@@ -353,7 +360,7 @@ int main(int argc, char *argv[]) {
 #ifndef DISABLE_GUI
   app.setQuitOnLastWindowClosed(false);
 #endif
-#if defined(Q_WS_X11) || defined(Q_WS_MAC) || defined(STACKTRACE_WIN)
+#if defined(Q_OS_UNIX) || defined(STACKTRACE_WIN)
   signal(SIGABRT, sigabrtHandler);
   signal(SIGTERM, sigtermHandler);
   signal(SIGINT, sigintHandler);
@@ -374,9 +381,9 @@ int main(int argc, char *argv[]) {
   QObject::connect(&app, SIGNAL(messageReceived(const QString&)),
                    &window, SLOT(processParams(const QString&)));
   app.setActivationWindow(&window);
-#ifdef Q_WS_MAC
+#ifdef Q_OS_MAC
   static_cast<QMacApplication*>(&app)->setReadyToProcessEvents();
-#endif // Q_WS_MAC
+#endif // Q_OS_MAC
 #else
   // Load Headless class
   HeadlessLoader loader(torrents);

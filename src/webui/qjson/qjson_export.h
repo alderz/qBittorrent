@@ -1,6 +1,6 @@
 /*
- * Bittorrent Client using Qt4 and libtorrent.
- * Copyright (C) 2006-2012  Ishan Arora and Christophe Dumez
+ * Bittorrent Client using Qt and libtorrent.
+ * Copyright (C) 2014  Vladimir Golovnev
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -25,20 +25,13 @@
  * but you are not obligated to do so. If you do not wish to do so, delete this
  * exception statement from your version.
  *
- * Contact : chris@qbittorrent.org
+ * Contact : glassez@yandex.ru
  */
 
+#ifndef QJSON_EXPORT_H
+#define QJSON_EXPORT_H
 
-#ifndef JSON_H
-#define JSON_H
-
-#include <QVariant>
-
-namespace json {
-
-  QString toJson(const QVariant& v);
-  QVariantMap fromJson(const QString& json);
-
-} // namespace json
+#include <qglobal.h>
+#define QJSON_EXPORT
 
 #endif

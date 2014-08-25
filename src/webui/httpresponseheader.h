@@ -1,6 +1,6 @@
 /*
  * Bittorrent Client using Qt4 and libtorrent.
- * Copyright (C) 2012, Christophe Dumez
+ * Copyright (C) 2014  sledgehammer999
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -25,39 +25,32 @@
  * but you are not obligated to do so. If you do not wish to do so, delete this
  * exception statement from your version.
  *
- * Contact : chris@qbittorrent.org
+ * Contact : hammered999@gmail.com
  */
 
-#include "jsonlist.h"
-#include "json.h"
+#ifndef HTTPRESPONSEHEADER_H
+#define HTTPRESPONSEHEADER_H
 
-JsonList::JsonList() : m_dirty(false)
-{
-}
+#include "httpheader.h"
 
-const QString& JsonList::toString() const
-{
-  if (m_dirty) {
-    m_json = "[" + m_items.join(",") + "]";
-    m_dirty = false;
-  }
-  return m_json;
-}
+class HttpResponseHeader: public HttpHeader {
+public:
+  HttpResponseHeader();
+  HttpResponseHeader(int code, const QString &text = QString(), int majorVer = 1, int minorVer = 1);
+  HttpResponseHeader(const QString &str);
+  virtual int majorVersion() const;
+  virtual int minorVersion() const;
+  QString reasonPhrase() const;
+  void setStatusLine(int code, const QString &text = QString(), int majorVer = 1, int minorVer = 1);
+  int statusCode() const;
+  virtual QString toString() const;
 
-void JsonList::clear()
-{
-  m_items.clear();
-  m_dirty = true;
-}
+private:
+  bool parseVersions(const QString &str);
+  int m_code;
+  QString m_text;
+  int m_majorVersion;
+  int m_minorVersion;
+};
 
-void JsonList::append(const QVariant& val)
-{
-  m_items.append(json::toJson(val));
-  m_dirty = true;
-}
-
-void JsonList::append(const JsonDict& dict)
-{
-  m_items.append(dict.toString());
-  m_dirty = true;
-}
+#endif // HTTPRESPONSEHEADER_H

@@ -57,7 +57,6 @@
 #include "torrentmodel.h"
 #include "deletionconfirmationdlg.h"
 #include "propertieswidget.h"
-#include "qinisettings.h"
 #include "iconprovider.h"
 #include "fs_utils.h"
 #include "autoexpandabledialog.h"
@@ -108,7 +107,7 @@ TransferListWidget::TransferListWidget(QWidget *parent, MainWindow *main_window,
   setItemsExpandable(false);
   setAutoScroll(true);
   setDragDropMode(QAbstractItemView::DragOnly);
-#if defined(Q_WS_MAC)
+#if defined(Q_OS_MAC)
   setAttribute(Qt::WA_MacShowFocusRect, false);
 #endif
 
@@ -125,6 +124,8 @@ TransferListWidget::TransferListWidget(QWidget *parent, MainWindow *main_window,
     setColumnHidden(TorrentModelItem::TR_AMOUNT_LEFT, true);
     setColumnHidden(TorrentModelItem::TR_TIME_ELAPSED, true);
     setColumnHidden(TorrentModelItem::TR_SAVE_PATH, true);
+    setColumnHidden(TorrentModelItem::TR_COMPLETED, true);
+    setColumnHidden(TorrentModelItem::TR_RATIO_LIMIT, true);
   }
 
   //Ensure that at least one column is visible at all times
@@ -208,12 +209,6 @@ inline QModelIndex TransferListWidget::mapFromSource(const QModelIndex &index) c
   return nameFilterModel->mapFromSource(statusFilterModel->mapFromSource(labelFilterModel->mapFromSource(index)));
 }
 
-
-QStringList TransferListWidget::getCustomLabels() const {
-  QIniSettings settings;
-  return settings.value("TransferListFilters/customLabels", QStringList()).toStringList();
-}
-
 void TransferListWidget::torrentDoubleClicked(const QModelIndex& index) {
   const int row = mapToSource(index).row();
   const QString hash = getHashFromRow(row);
@@ -221,9 +216,9 @@ void TransferListWidget::torrentDoubleClicked(const QModelIndex& index) {
   if (!h.is_valid()) return;
   int action;
   if (h.is_seed()) {
-    action = Preferences().getActionOnDblClOnTorrentFn();
+    action = Preferences::instance()->getActionOnDblClOnTorrentFn();
   } else {
-    action = Preferences().getActionOnDblClOnTorrentDl();
+    action = Preferences::instance()->getActionOnDblClOnTorrentDl();
   }
 
   switch(action) {
@@ -318,7 +313,7 @@ void TransferListWidget::deleteSelectedTorrents() {
   if (hashes.empty()) return;
   QTorrentHandle torrent = BTSession->getTorrentHandle(hashes[0]);
   bool delete_local_files = false;
-  if (Preferences().confirmTorrentDeletion() &&
+  if (Preferences::instance()->confirmTorrentDeletion() &&
       !DeletionConfirmationDlg::askForDeletionConfirmation(delete_local_files, hashes.size(), torrent.name()))
     return;
   foreach (const QString &hash, hashes) {
@@ -330,7 +325,7 @@ void TransferListWidget::deleteVisibleTorrents() {
   if (nameFilterModel->rowCount() <= 0) return;
   QTorrentHandle torrent = BTSession->getTorrentHandle(getHashFromRow(0));
   bool delete_local_files = false;
-  if (Preferences().confirmTorrentDeletion() &&
+  if (Preferences::instance()->confirmTorrentDeletion() &&
       !DeletionConfirmationDlg::askForDeletionConfirmation(delete_local_files, nameFilterModel->rowCount(), torrent.name()))
     return;
   QStringList hashes;
@@ -517,7 +512,7 @@ void TransferListWidget::setDlLimitSelectedTorrents() {
   int default_limit = -1;
   if (all_same_limit)
     default_limit = selected_torrents.first().download_limit();
-  const long new_limit = SpeedLimitDialog::askSpeedLimit(&ok, tr("Torrent Download Speed Limiting"), default_limit, Preferences().getGlobalDownloadLimit()*1024.);
+  const long new_limit = SpeedLimitDialog::askSpeedLimit(&ok, tr("Torrent Download Speed Limiting"), default_limit, Preferences::instance()->getGlobalDownloadLimit()*1024.);
   if (ok) {
     foreach (const QTorrentHandle &h, selected_torrents) {
       qDebug("Applying download speed limit of %ld Kb/s to torrent %s", (long)(new_limit/1024.), qPrintable(h.hash()));
@@ -550,7 +545,7 @@ void TransferListWidget::setUpLimitSelectedTorrents() {
   int default_limit = -1;
   if (all_same_limit)
     default_limit = selected_torrents.first().upload_limit();
-  const long new_limit = SpeedLimitDialog::askSpeedLimit(&ok, tr("Torrent Upload Speed Limiting"), default_limit, Preferences().getGlobalUploadLimit()*1024.);
+  const long new_limit = SpeedLimitDialog::askSpeedLimit(&ok, tr("Torrent Upload Speed Limiting"), default_limit, Preferences::instance()->getGlobalUploadLimit()*1024.);
   if (ok) {
     foreach (const QTorrentHandle &h, selected_torrents) {
       qDebug("Applying upload speed limit of %ld Kb/s to torrent %s", (long)(new_limit/1024.), qPrintable(h.hash()));
@@ -860,7 +855,7 @@ void TransferListWidget::displayListMenu(const QPoint&) {
   if (selectedIndexes.size() == 1)
     listMenu.addAction(&actionRename);
   // Label Menu
-  QStringList customLabels = getCustomLabels();
+  QStringList customLabels = Preferences::instance()->getTorrentLabels();
   customLabels.sort();
   QList<QAction*> labelActions;
   QMenu *labelMenu = listMenu.addMenu(IconProvider::instance()->getIcon("view-categories"), tr("Label"));
@@ -973,7 +968,7 @@ void TransferListWidget::applyStatusFilter(int f) {
   case FILTER_DOWNLOADING:
     statusFilterModel->setFilterRegExp(QRegExp(QString::number(TorrentModelItem::STATE_DOWNLOADING)+"|"+QString::number(TorrentModelItem::STATE_STALLED_DL)+"|"+
                                                QString::number(TorrentModelItem::STATE_PAUSED_DL)+"|"+QString::number(TorrentModelItem::STATE_CHECKING_DL)+"|"+
-                                               QString::number(TorrentModelItem::STATE_QUEUED_DL), Qt::CaseSensitive));
+                                               QString::number(TorrentModelItem::STATE_QUEUED_DL)+"|"+QString::number(TorrentModelItem::STATE_DOWNLOADING_META), Qt::CaseSensitive));
     break;
   case FILTER_COMPLETED:
     statusFilterModel->setFilterRegExp(QRegExp(QString::number(TorrentModelItem::STATE_SEEDING)+"|"+QString::number(TorrentModelItem::STATE_STALLED_UP)+"|"+
@@ -1001,14 +996,12 @@ void TransferListWidget::applyStatusFilter(int f) {
 
 void TransferListWidget::saveSettings()
 {
-  QIniSettings settings;
-  settings.setValue("TransferList/HeaderState", header()->saveState());
+  Preferences::instance()->setTransHeaderState(header()->saveState());
 }
 
 bool TransferListWidget::loadSettings()
 {
-  QIniSettings settings;
-  bool ok = header()->restoreState(settings.value("TransferList/HeaderState").toByteArray());
+  bool ok = header()->restoreState(Preferences::instance()->getTransHeaderState());
   if (!ok) {
     header()->resizeSection(0, 200); // Default
   }

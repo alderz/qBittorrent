@@ -43,13 +43,13 @@
 #endif
 #include <libtorrent/torrent_info.hpp>
 
-#ifdef Q_WS_MAC
+#ifdef Q_OS_MAC
 #include <CoreServices/CoreServices.h>
 #include <Carbon/Carbon.h>
 #endif
 
-#ifndef Q_WS_WIN
-#if defined(Q_WS_MAC) || defined(Q_OS_FREEBSD)
+#ifndef Q_OS_WIN
+#if defined(Q_OS_MAC) || defined(Q_OS_FREEBSD)
 #include <sys/param.h>
 #include <sys/mount.h>
 #else
@@ -60,8 +60,12 @@
 #include <winbase.h>
 #endif
 
-#if defined(Q_WS_WIN) || defined(Q_OS_OS2)
+#if defined(Q_OS_WIN) || defined(Q_OS_OS2)
+#if (QT_VERSION < QT_VERSION_CHECK(5, 0, 0))
 #include <QDesktopServices>
+#else
+#include <QStandardPaths>
+#endif
 #endif
 
 using namespace libtorrent;
@@ -82,19 +86,25 @@ QString fsutils::fromNativePath(const QString &path) {
 /**
  * Returns the file extension part of a file name.
  */
-QString fsutils::fileExtension(const QString &filename)
-{
+QString fsutils::fileExtension(const QString &filename) {
   const int point_index = filename.lastIndexOf(".");
   return (point_index >= 0) ? filename.mid(point_index + 1) : QString();
 }
 
-QString fsutils::fileName(const QString& file_path)
-{
+QString fsutils::fileName(const QString& file_path) {
   QString path = fsutils::fromNativePath(file_path);
   const int slash_index = path.lastIndexOf("/");
   if (slash_index == -1)
     return path;
   return path.mid(slash_index + 1);
+}
+
+QString fsutils::folderName(const QString& file_path) {
+  QString path = fsutils::fromNativePath(file_path);
+  const int slash_index = path.lastIndexOf("/");
+  if (slash_index == -1)
+    return path;
+  return path.left(slash_index);
 }
 
 bool fsutils::isValidTorrentFile(const QString& torrent_path) {
@@ -114,8 +124,7 @@ bool fsutils::isValidTorrentFile(const QString& torrent_path) {
  * This function will also remove .DS_Store files on Mac OS and
  * Thumbs.db on Windows.
  */
-bool fsutils::smartRemoveEmptyFolderTree(const QString& dir_path)
-{
+bool fsutils::smartRemoveEmptyFolderTree(const QString& dir_path) {
   qDebug() << Q_FUNC_INFO << dir_path;
   if (dir_path.isEmpty())
     return false;
@@ -125,9 +134,9 @@ bool fsutils::smartRemoveEmptyFolderTree(const QString& dir_path)
     return true;
 
   // Remove Files created by the OS
-#if defined Q_WS_MAC
+#if defined Q_OS_MAC
   fsutils::forceRemove(dir_path + QLatin1String("/.DS_Store"));
-#elif defined Q_WS_WIN
+#elif defined Q_OS_WIN
   fsutils::forceRemove(dir_path + QLatin1String("/Thumbs.db"));
 #endif
 
@@ -165,8 +174,7 @@ bool fsutils::smartRemoveEmptyFolderTree(const QString& dir_path)
  *
  * This function will try to fix the file permissions before removing it.
  */
-bool fsutils::forceRemove(const QString& file_path)
-{
+bool fsutils::forceRemove(const QString& file_path) {
   QFile f(file_path);
   if (!f.exists())
     return true;
@@ -182,8 +190,7 @@ bool fsutils::forceRemove(const QString& file_path)
  *
  * Returns -1 in case of error.
  */
-qint64 fsutils::computePathSize(const QString& path)
-{
+qint64 fsutils::computePathSize(const QString& path) {
   // Check if it is a file
   QFileInfo fi(path);
   if (!fi.exists()) return -1;
@@ -203,8 +210,7 @@ qint64 fsutils::computePathSize(const QString& path)
 /**
  * Makes deep comparison of two files to make sure they are identical.
  */
-bool fsutils::sameFiles(const QString& path1, const QString& path2)
-{
+bool fsutils::sameFiles(const QString& path1, const QString& path2) {
   QFile f1(path1), f2(path2);
   if (!f1.exists() || !f2.exists()) return false;
   if (f1.size() != f2.size()) return false;
@@ -283,7 +289,7 @@ long long fsutils::freeDiskSpaceOnPath(QString path) {
   }
   Q_ASSERT(dir_path.exists());
 
-#ifndef Q_WS_WIN
+#ifndef Q_OS_WIN
   unsigned long long available;
   struct statfs stats;
   const QString statfs_path = dir_path.path()+"/.";
@@ -322,8 +328,7 @@ long long fsutils::freeDiskSpaceOnPath(QString path) {
 #endif
 }
 
-QString fsutils::branchPath(const QString& file_path, QString* removed)
-{
+QString fsutils::branchPath(const QString& file_path, QString* removed) {
   QString ret = fsutils::fromNativePath(file_path);
   if (ret.endsWith("/"))
     ret.chop(1);
@@ -336,9 +341,8 @@ QString fsutils::branchPath(const QString& file_path, QString* removed)
   return ret;
 }
 
-bool fsutils::sameFileNames(const QString &first, const QString &second)
-{
-#if defined(Q_WS_X11) || defined(Q_WS_MAC) || defined(Q_WS_QWS)
+bool fsutils::sameFileNames(const QString &first, const QString &second) {
+#if defined(Q_OS_UNIX) || defined(Q_WS_QWS)
   return QString::compare(first, second, Qt::CaseSensitive) == 0;
 #else
   return QString::compare(first, second, Qt::CaseInsensitive) == 0;
@@ -364,14 +368,14 @@ QString fsutils::expandPathAbs(const QString& path) {
 
 QString fsutils::QDesktopServicesDataLocation() {
   QString result;
-#ifdef Q_WS_WIN
+#ifdef Q_OS_WIN
   LPWSTR path=new WCHAR[256];
   if (SHGetSpecialFolderPath(0, path, CSIDL_LOCAL_APPDATA, FALSE))
     result = fsutils::fromNativePath(QString::fromWCharArray(path));
   if (!QCoreApplication::applicationName().isEmpty())
     result += QLatin1String("/") + qApp->applicationName();
 #else
-#ifdef Q_WS_MAC
+#ifdef Q_OS_MAC
   FSRef ref;
   OSErr err = FSFindFolder(kUserDomain, kApplicationSupportFolderType, false, &ref);
   if (err)
@@ -397,10 +401,10 @@ QString fsutils::QDesktopServicesDataLocation() {
 
 QString fsutils::QDesktopServicesCacheLocation() {
   QString result;
-#if defined(Q_WS_WIN) || defined(Q_OS_OS2)
+#if defined(Q_OS_WIN) || defined(Q_OS_OS2)
   result = QDesktopServicesDataLocation() + QLatin1String("cache");
 #else
-#ifdef Q_WS_MAC
+#ifdef Q_OS_MAC
   // http://developer.apple.com/documentation/Carbon/Reference/Folder_Manager/Reference/reference.html
   FSRef ref;
   OSErr err = FSFindFolder(kUserDomain, kCachedDataFolderType, false, &ref);
@@ -424,16 +428,21 @@ QString fsutils::QDesktopServicesCacheLocation() {
 }
 
 QString fsutils::QDesktopServicesDownloadLocation() {
-#if defined(Q_WS_WIN) || defined(Q_OS_OS2)
+#if defined(Q_OS_WIN) || defined(Q_OS_OS2)
   // as long as it stays WinXP like we do the same on OS/2
   // TODO: Use IKnownFolderManager to get path of FOLDERID_Downloads
   // instead of hardcoding "Downloads"
   // Unfortunately, this would break compatibility with WinXP
+#if (QT_VERSION < QT_VERSION_CHECK(5, 0, 0))
   return QDir(QDesktopServices::storageLocation(QDesktopServices::DocumentsLocation)).absoluteFilePath(
         QCoreApplication::translate("fsutils", "Downloads"));
+#else
+  return QDir(QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)).absoluteFilePath(
+        QCoreApplication::translate("fsutils", "Downloads"));
+#endif
 #endif
 
-#ifdef Q_WS_X11
+#if (defined(Q_OS_UNIX) && !defined(Q_OS_MAC))
   QString save_path;
   // Default save path on Linux
   QString config_path = QString::fromLocal8Bit(qgetenv("XDG_CONFIG_HOME").constData());
@@ -468,7 +477,7 @@ QString fsutils::QDesktopServicesDownloadLocation() {
   return save_path;
 #endif
 
-#ifdef Q_WS_MAC
+#ifdef Q_OS_MAC
   // TODO: How to support this on Mac OS X?
 #endif
 

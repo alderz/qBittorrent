@@ -34,30 +34,31 @@
 #include <QXmlStreamReader>
 #include <QNetworkProxy>
 #include <QDesktopServices>
+#include <QDebug>
+#include <QRegExp>
+#include <QStringList>
 
 #include "programupdater.h"
 #include "fs_utils.h"
 #include "preferences.h"
 
-#ifdef Q_WS_MAC
-const QString RSS_URL = "http://sourceforge.net/api/file/index/project-id/163414/mtime/desc/rss?path=/qbittorrent-mac";
+#ifdef Q_OS_MAC
+const QUrl RSS_URL("http://sourceforge.net/api/file/index/project-id/163414/mtime/desc/rss?path=/qbittorrent-mac");
 const QString FILE_EXT = "DMG";
 #else
-const QString RSS_URL = "http://sourceforge.net/api/file/index/project-id/163414/mtime/desc/rss?path=/qbittorrent-win32";
+const QUrl RSS_URL("http://sourceforge.net/api/file/index/project-id/163414/mtime/desc/rss?path=/qbittorrent-win32");
 const QString FILE_EXT = "EXE";
 #endif
-
-using namespace libtorrent;
 
 ProgramUpdater::ProgramUpdater(QObject *parent, bool invokedByUser) :
   QObject(parent), m_invokedByUser(invokedByUser)
 {
   mp_manager = new QNetworkAccessManager(this);
-  Preferences pref;
+  Preferences* const pref = Preferences::instance();
   // Proxy support
-  if (pref.isProxyEnabled()) {
+  if (pref->isProxyEnabled()) {
     QNetworkProxy proxy;
-    switch(pref.getProxyType()) {
+    switch(pref->getProxyType()) {
     case Proxy::SOCKS4:
     case Proxy::SOCKS5:
     case Proxy::SOCKS5_PW:
@@ -66,12 +67,12 @@ ProgramUpdater::ProgramUpdater(QObject *parent, bool invokedByUser) :
       proxy.setType(QNetworkProxy::HttpProxy);
       break;
     }
-    proxy.setHostName(pref.getProxyIp());
-    proxy.setPort(pref.getProxyPort());
+    proxy.setHostName(pref->getProxyIp());
+    proxy.setPort(pref->getProxyPort());
     // Proxy authentication
-    if (pref.isProxyAuthEnabled()) {
-      proxy.setUser(pref.getProxyUsername());
-      proxy.setPassword(pref.getProxyPassword());
+    if (pref->isProxyAuthEnabled()) {
+      proxy.setUser(pref->getProxyUsername());
+      proxy.setPassword(pref->getProxyPassword());
     }
     mp_manager->setProxy(proxy);
   }
@@ -87,7 +88,9 @@ void ProgramUpdater::checkForUpdates()
   connect(mp_manager, SIGNAL(finished(QNetworkReply*)),
           this, SLOT(rssDownloadFinished(QNetworkReply*)));
   // Send the request
-  mp_manager->get(QNetworkRequest(QUrl(RSS_URL)));
+  QNetworkRequest request(RSS_URL);
+  request.setRawHeader("User-Agent", QString("qBittorrent/%1 ProgramUpdater (www.qbittorrent.org)").arg(VERSION).toLocal8Bit());
+  mp_manager->get(request);
 }
 
 void ProgramUpdater::setUpdateUrl(QString title) {

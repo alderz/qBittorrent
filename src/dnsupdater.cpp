@@ -31,6 +31,9 @@
 #include <QNetworkAccessManager>
 #include <QDebug>
 #include <QRegExp>
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+#include <QUrlQuery>
+#endif
 #include "dnsupdater.h"
 #include "qbtsession.h"
 
@@ -40,9 +43,9 @@ DNSUpdater::DNSUpdater(QObject *parent) :
   updateCredentials();
 
   // Load saved settings from previous session
-  QIniSettings settings;
-  m_lastIPCheckTime = settings.value("DNSUpdater/lastUpdateTime").toDateTime();
-  m_lastIP = QHostAddress(settings.value("DNSUpdater/lastIP").toString());
+  const Preferences* const pref = Preferences::instance();
+  m_lastIPCheckTime = pref->getDNSLastUpd();
+  m_lastIP = QHostAddress(pref->getDNSLastIP());
 
   // Start IP checking timer
   m_ipCheckTimer.setInterval(IP_CHECK_INTERVAL_MS);
@@ -58,9 +61,9 @@ DNSUpdater::DNSUpdater(QObject *parent) :
 
 DNSUpdater::~DNSUpdater() {
   // Save lastupdate time and last ip
-  QIniSettings settings;
-  settings.setValue("DNSUpdater/lastUpdateTime", m_lastIPCheckTime);
-  settings.setValue("DNSUpdater/lastIP", m_lastIP.toString());
+  Preferences* const pref = Preferences::instance();
+  pref->setDNSLastUpd(m_lastIPCheckTime);
+  pref->setDNSLastIP(m_lastIP.toString());
 }
 
 void DNSUpdater::checkPublicIP()
@@ -148,9 +151,18 @@ QUrl DNSUpdater::getUpdateUrl() const
     Q_ASSERT(0);
   }
   url.setPath("/nic/update");
+
+#if (QT_VERSION < QT_VERSION_CHECK(5, 0, 0))
   url.addQueryItem("hostname", m_domain);
   url.addQueryItem("myip", m_lastIP.toString());
+#else
+  QUrlQuery urlQuery(url);
+  urlQuery.addQueryItem("hostname", m_domain);
+  urlQuery.addQueryItem("myip", m_lastIP.toString());
+  url.setQuery(urlQuery);
+#endif
   Q_ASSERT(url.isValid());
+
   qDebug() << Q_FUNC_INFO << url.toString();
   return url;
 }
@@ -222,15 +234,15 @@ void DNSUpdater::processIPUpdateReply(const QString &reply)
 void DNSUpdater::updateCredentials()
 {
   if (m_state == FATAL) return;
-  Preferences pref;
+  Preferences* const pref = Preferences::instance();
   bool change = false;
   // Get DNS service information
-  if (m_service != pref.getDynDNSService()) {
-    m_service = pref.getDynDNSService();
+  if (m_service != pref->getDynDNSService()) {
+    m_service = pref->getDynDNSService();
     change = true;
   }
-  if (m_domain != pref.getDynDomainName()) {
-    m_domain = pref.getDynDomainName();
+  if (m_domain != pref->getDynDomainName()) {
+    m_domain = pref->getDynDomainName();
     QRegExp domain_regex("^(?:(?!\\d|-)[a-zA-Z0-9\\-]{1,63}\\.)+[a-zA-Z]{2,}$");
     if (domain_regex.indexIn(m_domain) < 0) {
       QBtSession::instance()->addConsoleMessage(tr("Dynamic DNS error: supplied domain name is invalid."),
@@ -242,8 +254,8 @@ void DNSUpdater::updateCredentials()
     }
     change = true;
   }
-  if (m_username != pref.getDynDNSUsername()) {
-    m_username = pref.getDynDNSUsername();
+  if (m_username != pref->getDynDNSUsername()) {
+    m_username = pref->getDynDNSUsername();
     if (m_username.length() < 4) {
       QBtSession::instance()->addConsoleMessage(tr("Dynamic DNS error: supplied username is too short."),
                                                 "red");
@@ -254,8 +266,8 @@ void DNSUpdater::updateCredentials()
     }
     change = true;
   }
-  if (m_password != pref.getDynDNSPassword()) {
-    m_password = pref.getDynDNSPassword();
+  if (m_password != pref->getDynDNSPassword()) {
+    m_password = pref->getDynDNSPassword();
     if (m_password.length() < 4) {
       QBtSession::instance()->addConsoleMessage(tr("Dynamic DNS error: supplied password is too short."),
                                                 "red");

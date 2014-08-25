@@ -40,8 +40,12 @@
 #include "torrentmodel.h"
 #include "qbtsession.h"
 
-#ifdef Q_WS_WIN
-  #include <QPlastiqueStyle>
+#ifdef Q_OS_WIN
+#if (QT_VERSION < QT_VERSION_CHECK(5, 0, 0))
+#include <QPlastiqueStyle>
+#else
+#include <QProxyStyle>
+#endif
 #endif
 
 // Defines for download list list columns
@@ -61,12 +65,13 @@ public:
     case TorrentModelItem::TR_AMOUNT_DOWNLOADED:
     case TorrentModelItem::TR_AMOUNT_UPLOADED:
     case TorrentModelItem::TR_AMOUNT_LEFT:
-    case TorrentModelItem::TR_SIZE:{
+    case TorrentModelItem::TR_COMPLETED:
+    case TorrentModelItem::TR_SIZE: {
         QItemDelegate::drawBackground(painter, opt, index);
         QItemDelegate::drawDisplay(painter, opt, option.rect, misc::friendlyUnit(index.data().toLongLong()));
         break;
       }
-    case TorrentModelItem::TR_ETA:{
+    case TorrentModelItem::TR_ETA: {
         QItemDelegate::drawBackground(painter, opt, index);
         QItemDelegate::drawDisplay(painter, opt, option.rect, misc::userFriendlyDuration(index.data().toLongLong()));
         break;
@@ -74,9 +79,10 @@ public:
     case TorrentModelItem::TR_SEEDS:
     case TorrentModelItem::TR_PEERS: {
         QString display = QString::number(index.data().toLongLong());
-        if (index.data(Qt::UserRole).toLongLong() > 0) {
+        qlonglong total = index.data(Qt::UserRole).toLongLong();
+        if (total > 0) {
           // Scrape was successful, we have total values
-          display += " ("+QString::number(index.data(Qt::UserRole).toLongLong())+")";
+          display += " ("+QString::number(total)+")";
         }
         QItemDelegate::drawBackground(painter, opt, index);
         QItemDelegate::drawDisplay(painter, opt, opt.rect, display);
@@ -128,14 +134,14 @@ public:
         break;
       }
     case TorrentModelItem::TR_UPSPEED:
-    case TorrentModelItem::TR_DLSPEED:{
+    case TorrentModelItem::TR_DLSPEED: {
         QItemDelegate::drawBackground(painter, opt, index);
         const qulonglong speed = index.data().toULongLong();
         QItemDelegate::drawDisplay(painter, opt, opt.rect, misc::friendlyUnit(speed)+tr("/s", "/second (.i.e per second)"));
         break;
       }
     case TorrentModelItem::TR_UPLIMIT:
-    case TorrentModelItem::TR_DLLIMIT:{
+    case TorrentModelItem::TR_DLLIMIT: {
       QItemDelegate::drawBackground(painter, opt, index);
       const qlonglong limit = index.data().toLongLong();
       QItemDelegate::drawDisplay(painter, opt, opt.rect, limit > 0 ? misc::accurateDoubleToString(limit/1024., 1) + " " + tr("KiB/s", "KiB/second (.i.e per second)") : QString::fromUtf8("∞"));
@@ -155,10 +161,12 @@ public:
       QItemDelegate::drawBackground(painter, opt, index);
       QItemDelegate::drawDisplay(painter, opt, opt.rect, index.data().toDateTime().toLocalTime().toString(Qt::DefaultLocaleShortDate));
       break;
-    case TorrentModelItem::TR_RATIO:{
+    case TorrentModelItem::TR_RATIO_LIMIT:
+    case TorrentModelItem::TR_RATIO: {
         QItemDelegate::drawBackground(painter, opt, index);
         const qreal ratio = index.data().toDouble();
-        QItemDelegate::drawDisplay(painter, opt, opt.rect, ratio > QBtSession::MAX_RATIO ? QString::fromUtf8("∞") : misc::accurateDoubleToString(ratio, 2));
+        QItemDelegate::drawDisplay(painter, opt, opt.rect,
+                                   (ratio == -1 || ratio > QBtSession::MAX_RATIO) ? QString::fromUtf8("∞") : misc::accurateDoubleToString(ratio, 2));
         break;
       }
     case TorrentModelItem::TR_PRIORITY: {
@@ -171,21 +179,25 @@ public:
         }
         break;
       }
-    case TorrentModelItem::TR_PROGRESS:{
+    case TorrentModelItem::TR_PROGRESS: {
         QStyleOptionProgressBarV2 newopt;
         qreal progress = index.data().toDouble()*100.;        
         newopt.rect = opt.rect;
-        newopt.text = misc::accurateDoubleToString(progress, 1);
+        newopt.text = misc::accurateDoubleToString(progress, 1) + "%";
         newopt.progress = (int)progress;
         newopt.maximum = 100;
         newopt.minimum = 0;
         newopt.state |= QStyle::State_Enabled;
         newopt.textVisible = true;
-#ifndef Q_WS_WIN
+#ifndef Q_OS_WIN
         QApplication::style()->drawControl(QStyle::CE_ProgressBar, &newopt, painter);
 #else
         // XXX: To avoid having the progress text on the right of the bar
-        QPlastiqueStyle st;
+#if (QT_VERSION < QT_VERSION_CHECK(5, 0, 0))
+          QPlastiqueStyle st;
+#else
+          QProxyStyle st("fusion");
+#endif
         st.drawControl(QStyle::CE_ProgressBar, &newopt, painter, 0);
 #endif
         break;
@@ -199,6 +211,26 @@ public:
   QWidget* createEditor(QWidget*, const QStyleOptionViewItem &, const QModelIndex &) const {
     // No editor here
     return 0;
+  }
+
+  // Reimplementing sizeHint() because the 'name' column contains text+icon.
+  // When that WHOLE column goes out of view(eg user scrolls horizontally)
+  // the rows shrink if the text's height is smaller than the icon's height.
+  // This happens because icon from the 'name' column is no longer drawn.
+  QSize sizeHint(const QStyleOptionViewItem & option, const QModelIndex & index) const {
+    QSize size = QItemDelegate::sizeHint(option, index);
+
+    static int icon_height = -1;
+    if (icon_height == -1) {
+      QIcon icon(":/Icons/skin/downloading.png");
+      QList<QSize> ic_sizes(icon.availableSizes());
+      icon_height = ic_sizes[0].height();
+    }
+
+    if (size.height() < icon_height)
+      size.setHeight(icon_height);
+
+    return size;
   }
 
 };

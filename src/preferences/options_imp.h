@@ -101,8 +101,8 @@ private:
   bool startMinimized() const;
   bool isSlashScreenDisabled() const;
   bool preventFromSuspend() const;
-#ifdef Q_WS_WIN
-  bool Startup() const;
+#ifdef Q_OS_WIN
+  bool WinStartup() const;
 #endif
   // Downloads
   QString getSavePath() const;
@@ -126,8 +126,6 @@ private:
   int getMaxUploads() const;
   int getMaxUploadsPerTorrent() const;
   bool isDHTEnabled() const;
-  bool isDHTPortSameAsBT() const;
-  int getDHTPort() const;
   bool isLSDEnabled() const;
   int getEncryptionSetting() const;
   qreal getMaxRatio() const;

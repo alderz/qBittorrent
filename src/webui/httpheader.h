@@ -1,6 +1,6 @@
 /*
  * Bittorrent Client using Qt4 and libtorrent.
- * Copyright (C) 2012, Christophe Dumez
+ * Copyright (C) 2014  sledgehammer999
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -25,28 +25,51 @@
  * but you are not obligated to do so. If you do not wish to do so, delete this
  * exception statement from your version.
  *
- * Contact : chris@qbittorrent.org
+ * Contact : hammered999@gmail.com
  */
 
-#ifndef JSONLIST_H
-#define JSONLIST_H
+#ifndef HTTPHEADER_H
+#define HTTPHEADER_H
 
+#include <QString>
 #include <QStringList>
-#include "jsondict.h"
+#include <QMultiHash>
+#include <QPair>
 
-class JsonList
-{
+class HttpHeader {
+
 public:
-  JsonList();
-  const QString& toString() const;
-  void clear();
-  void append(const QVariant& val);
-  void append(const JsonDict& dict);
+  HttpHeader();
+  HttpHeader(const QString &str);
+  virtual ~HttpHeader();
+  void addValue(const QString &key, const QString &value);
+  QStringList allValues(const QString &key) const;
+  uint contentLength() const;
+  QString contentType() const;
+  bool hasContentLength() const;
+  bool hasContentType() const;
+  bool hasKey(const QString &key) const;
+  bool isValid() const;
+  QStringList keys() const;
+  virtual int majorVersion() const =0;
+  virtual int minorVersion() const =0;
+  void removeAllValues(const QString &key);
+  void removeValue(const QString &key);
+  void setContentLength(int len);
+  void setContentType(const QString &type);
+  void setValue(const QString &key, const QString &value);
+  void setValues(const QList<QPair<QString, QString> > &values);
+  virtual QString toString() const;
+  QString value(const QString &key) const;
+  QList<QPair<QString, QString> > values() const;
+
+protected:
+  void parse(const QString &str);
+  void setValid(bool valid = true);
 
 private:
-  mutable bool m_dirty;
-  mutable QString m_json;
-  QStringList m_items;
+  QMultiHash<QString, QString> m_headers;
+  bool m_valid;
 };
 
-#endif // JSONLIST_H
+#endif // HTTPHEADER_H

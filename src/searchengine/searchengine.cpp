@@ -43,7 +43,7 @@
 #include <QFileDialog>
 #include <QDesktopServices>
 
-#ifdef Q_WS_WIN
+#ifdef Q_OS_WIN
 #include <stdlib.h>
 #endif
 
@@ -54,7 +54,6 @@
 #include "misc.h"
 #include "preferences.h"
 #include "searchlistdelegate.h"
-#include "qinisettings.h"
 #include "mainwindow.h"
 #include "iconprovider.h"
 #include "lineedit.h"
@@ -80,7 +79,7 @@ SearchEngine::SearchEngine(MainWindow* parent)
   // Boolean initialization
   search_stopped = false;
   // Creating Search Process
-#ifdef Q_WS_WIN
+#ifdef Q_OS_WIN
   has_python = addPythonPathToEnv();
 #endif
   searchProcess = new QProcess(this);
@@ -95,7 +94,7 @@ SearchEngine::SearchEngine(MainWindow* parent)
   // Update nova.py search plugin if necessary
   updateNova();
   supported_engines = new SupportedEngines(
-      #ifdef Q_WS_WIN
+      #ifdef Q_OS_WIN
         has_python
       #endif
         );
@@ -115,7 +114,7 @@ void SearchEngine::fillCatCombobox() {
   }
 }
 
-#ifdef Q_WS_WIN
+#ifdef Q_OS_WIN
 bool SearchEngine::addPythonPathToEnv() {
   QString python_path = Preferences::getPythonPath();
   if (!python_path.isEmpty()) {
@@ -227,7 +226,7 @@ void SearchEngine::giveFocusToSearchInput() {
 
 // Function called when we click on search button
 void SearchEngine::on_search_button_clicked() {
-#ifdef Q_WS_WIN
+#ifdef Q_OS_WIN
   if (!has_python) {
     if (QMessageBox::question(this, tr("Missing Python Interpreter"),
                              tr("Python 2.x is required to use the search engine but it does not seem to be installed.\nDo you want to install it now?"),
@@ -239,7 +238,7 @@ void SearchEngine::on_search_button_clicked() {
   }
 #endif
   if (searchProcess->state() != QProcess::NotRunning) {
-#ifdef Q_WS_WIN
+#ifdef Q_OS_WIN
     searchProcess->kill();
 #else
     searchProcess->terminate();
@@ -301,12 +300,12 @@ void SearchEngine::propagateSectionResized(int index, int , int newsize) {
 void SearchEngine::saveResultsColumnsWidth() {
   if (all_tab.size() > 0) {
     QTreeView* treeview = all_tab.first()->getCurrentTreeView();
-    QIniSettings settings;
+    Preferences* const pref = Preferences::instance();
     QStringList width_list;
     QStringList new_width_list;
     short nbColumns = all_tab.first()->getCurrentSearchListModel()->columnCount();
 
-    QString line = settings.value("SearchResultsColsWidth", QString()).toString();
+    QString line = pref->getSearchColsWidth();
     if (!line.isEmpty()) {
       width_list = line.split(' ');
     }
@@ -323,7 +322,7 @@ void SearchEngine::saveResultsColumnsWidth() {
         new_width_list << QString::number(treeview->columnWidth(i));
       }
     }
-    settings.setValue("SearchResultsColsWidth", new_width_list.join(" "));
+    pref->setSearchColsWidth(new_width_list.join(" "));
   }
 }
 
@@ -486,13 +485,12 @@ void SearchEngine::searchFinished(int exitcode,QProcess::ExitStatus) {
   if (searchTimeout->isActive()) {
     searchTimeout->stop();
   }
-  QIniSettings settings;
-  bool useNotificationBalloons = settings.value("Preferences/General/NotificationBaloons", true).toBool();
+  bool useNotificationBalloons = Preferences::instance()->useProgramNotification();
   if (useNotificationBalloons && mp_mainWindow->getCurrentTabWidget() != this) {
     mp_mainWindow->showNotificationBaloon(tr("Search Engine"), tr("Search has finished"));
   }
   if (exitcode) {
-#ifdef Q_WS_WIN
+#ifdef Q_OS_WIN
     search_status->setText(tr("Search aborted"));
 #else
     search_status->setText(tr("An error occurred during search..."));

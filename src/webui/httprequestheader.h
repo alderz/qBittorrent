@@ -1,6 +1,6 @@
 /*
  * Bittorrent Client using Qt4 and libtorrent.
- * Copyright (C) 2012, Christophe Dumez
+ * Copyright (C) 2014  sledgehammer999
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -25,33 +25,35 @@
  * but you are not obligated to do so. If you do not wish to do so, delete this
  * exception statement from your version.
  *
- * Contact : chris@qbittorrent.org
+ * Contact : hammered999@gmail.com
  */
 
-#include "jsondict.h"
-#include "json.h"
+#ifndef HTTPREQUESTHEADER_H
+#define HTTPREQUESTHEADER_H
 
-JsonDict::JsonDict(): m_dirty(false)
-{
-}
+#include "httpheader.h"
 
-void JsonDict::clear()
-{
-  m_items.clear();
-  m_dirty = true;
-}
+class HttpRequestHeader: public HttpHeader {
+public:
+  HttpRequestHeader();
+  // The path argument must be properly encoded for an HTTP request.
+  HttpRequestHeader(const QString &method, const QString &path, int majorVer = 1, int minorVer = 1);
+  HttpRequestHeader(const QString &str);
+  virtual int majorVersion() const;
+  virtual int minorVersion() const;
+  QString method() const;
+  // This is the raw path from the header. No decoding/encoding is performed.
+  QString path() const;
+  // The path argument must be properly encoded for an HTTP request.
+  void setRequest(const QString &method, const QString &path, int majorVer = 1, int minorVer = 1);
+  virtual QString toString() const;
 
-void JsonDict::add(const QString& key, const QVariant& value)
-{
-  m_items.append("\"" + key + "\":" + json::toJson(value));
-  m_dirty = true;
-}
+private:
+  bool parseVersions(const QString &str);
+  QString m_method;
+  QString m_path;
+  int m_majorVersion;
+  int m_minorVersion;
+};
 
-const QString& JsonDict::toString() const
-{
-  if (m_dirty) {
-    m_json = "{" + m_items.join(",") + "}";
-    m_dirty = false;
-  }
-  return m_json;
-}
+#endif // HTTPREQUESTHEADER_H

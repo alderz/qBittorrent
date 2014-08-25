@@ -49,10 +49,11 @@ Q_OBJECT
 
 public:
   enum State {STATE_DOWNLOADING, STATE_DOWNLOADING_META, STATE_ALLOCATING, STATE_STALLED_DL, STATE_STALLED_UP, STATE_SEEDING, STATE_PAUSED_DL, STATE_PAUSED_UP, STATE_QUEUED_DL, STATE_QUEUED_UP, STATE_CHECKING_UP, STATE_CHECKING_DL, STATE_QUEUED_CHECK, STATE_QUEUED_FASTCHECK, STATE_INVALID};
-  enum Column {TR_NAME, TR_PRIORITY, TR_SIZE, TR_PROGRESS, TR_STATUS, TR_SEEDS, TR_PEERS, TR_DLSPEED, TR_UPSPEED, TR_ETA, TR_RATIO, TR_LABEL, TR_ADD_DATE, TR_SEED_DATE, TR_TRACKER, TR_DLLIMIT, TR_UPLIMIT, TR_AMOUNT_DOWNLOADED, TR_AMOUNT_UPLOADED, TR_AMOUNT_LEFT, TR_TIME_ELAPSED, TR_SAVE_PATH, NB_COLUMNS};
+  enum Column {TR_NAME, TR_PRIORITY, TR_SIZE, TR_PROGRESS, TR_STATUS, TR_SEEDS, TR_PEERS, TR_DLSPEED, TR_UPSPEED, TR_ETA, TR_RATIO, TR_LABEL, TR_ADD_DATE, TR_SEED_DATE, TR_TRACKER, TR_DLLIMIT, TR_UPLIMIT, TR_AMOUNT_DOWNLOADED, TR_AMOUNT_UPLOADED, TR_AMOUNT_LEFT, TR_TIME_ELAPSED, TR_SAVE_PATH, TR_COMPLETED, TR_RATIO_LIMIT, NB_COLUMNS};
 
 public:
   TorrentModelItem(const QTorrentHandle& h);
+  void refreshStatus(libtorrent::torrent_status const& status);
   inline int columnCount() const { return NB_COLUMNS; }
   QVariant data(int column, int role = Qt::DisplayRole) const;
   bool setData(int column, const QVariant &value, int role = Qt::DisplayRole);
@@ -66,8 +67,8 @@ private:
 
 private:
   QTorrentHandle m_torrent;
+  libtorrent::torrent_status m_lastStatus;
   QDateTime m_addedTime;
-  QDateTime m_seedTime;
   QString m_label;
   QString m_name;
   mutable QIcon m_icon;
@@ -110,6 +111,7 @@ private slots:
   void forceModelRefresh();
   void handleTorrentLabelChange(QString previous, QString current);
   void handleTorrentAboutToBeRemoved(const QTorrentHandle & h);
+  void stateUpdated(const std::vector<libtorrent::torrent_status> &statuses);
 
 private:
   void beginInsertTorrent(int row);

@@ -43,7 +43,7 @@
 #include "trackersadditiondlg.h"
 #include "iconprovider.h"
 #include "qbtsession.h"
-#include "qinisettings.h"
+#include "preferences.h"
 #include "misc.h"
 #include "autoexpandabledialog.h"
 
@@ -198,27 +198,33 @@ void TrackerList::clear() {
 }
 
 void TrackerList::loadStickyItems(const QTorrentHandle &h) {
+  QString working = tr("Working");
+  QString disabled = tr("Disabled");
+
   // load DHT information
-  if (QBtSession::instance()->isDHTEnabled() && (!h.has_metadata() || !h.priv())) {
-    dht_item->setText(COL_STATUS, tr("Working"));
-  } else {
-    dht_item->setText(COL_STATUS, tr("Disabled"));
-  }
-  if (h.has_metadata() && h.priv()) {
-    dht_item->setText(COL_MSG, tr("This torrent is private"));
-  }
+  if (QBtSession::instance()->isDHTEnabled() && !h.priv())
+    dht_item->setText(COL_STATUS, working);
+  else
+    dht_item->setText(COL_STATUS, disabled);
 
   // Load PeX Information
   if (QBtSession::instance()->isPexEnabled() && !h.priv())
-    pex_item->setText(COL_STATUS, tr("Working"));
+    pex_item->setText(COL_STATUS, working);
   else
-    pex_item->setText(COL_STATUS, tr("Disabled"));
+    pex_item->setText(COL_STATUS, disabled);
 
   // Load LSD Information
   if (QBtSession::instance()->isLSDEnabled() && !h.priv())
-    lsd_item->setText(COL_STATUS, tr("Working"));
+    lsd_item->setText(COL_STATUS, working);
   else
-    lsd_item->setText(COL_STATUS, tr("Disabled"));
+    lsd_item->setText(COL_STATUS, disabled);
+
+  if (h.priv()) {
+    QString privateMsg = tr("This torrent is private");
+    dht_item->setText(COL_MSG, privateMsg);
+    pex_item->setText(COL_MSG, privateMsg);
+    lsd_item->setText(COL_MSG, privateMsg);
+  }
 
   // XXX: libtorrent should provide this info...
   // Count peers from DHT, LSD, PeX
@@ -495,14 +501,12 @@ void TrackerList::showTrackerListMenu(QPoint) {
 }
 
 void TrackerList::loadSettings() {
-  QIniSettings settings;
-  if (!header()->restoreState(settings.value("TorrentProperties/Trackers/TrackerListState").toByteArray())) {
+  if (!header()->restoreState(Preferences::instance()->getPropTrackerListState())) {
     setColumnWidth(0, 30);
     setColumnWidth(1, 300);
   }
 }
 
 void TrackerList::saveSettings() const {
-  QIniSettings settings;
-  settings.setValue("TorrentProperties/Trackers/TrackerListState", header()->saveState());
+  Preferences::instance()->setPropTrackerListState(header()->saveState());
 }
